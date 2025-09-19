@@ -444,7 +444,7 @@ const StudyCalendar = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="flex items-center gap-4 text-sm text-gray-600 mb-4">
+              <div className="flex items-center gap-4 text-sm text-gray-600 mb-4 flex-wrap gap-y-2">
                 <div className="flex items-center gap-1">
                   <Clock className="h-4 w-4" />
                   총 {todayPlan.totalHours}시간
@@ -486,10 +486,10 @@ const StudyCalendar = () => {
       {/* Weekly Schedule */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 flex-wrap w-full">
             <CalendarIcon className="h-5 w-5" />
-            주간 학습 계획 (드래그하여 일정 이동 가능)
-            <Badge variant="outline" className="ml-2">
+            주간 학습 계획
+            <Badge variant="secondary" className="ml-2 sm:ml-auto whitespace-nowrap">
               {startIndex + 1}일차 ~ {endIndex}일차
             </Badge>
           </CardTitle>
@@ -503,8 +503,8 @@ const StudyCalendar = () => {
               
               return (
                 <div key={plan.date} className={`border rounded-lg p-4 ${isOverCapacity ? 'border-red-300 bg-red-50' : ''}`}>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3">
+                  <div className="flex items-start justify-between mb-3 flex-wrap gap-y-2">
+                    <div className="flex items-center gap-3 flex-wrap gap-y-2">
                       <h3 className="font-semibold text-lg">
                         {plan.date} ({plan.dayOfWeek})
                       </h3>
@@ -519,7 +519,7 @@ const StudyCalendar = () => {
                         <Badge variant="destructive">시간 초과</Badge>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-gray-600 select-none">
+                    <div className="flex items-center gap-2 text-sm text-gray-600 select-none flex-wrap gap-y-1">
                       <Clock className="h-4 w-4" />
                       {editingCapacityDate === plan.date ? (
                         <div className="flex items-center gap-2">

@@ -166,20 +166,23 @@ export default function DataExportImport() {
       </CardHeader>
       <CardContent>
         <div className="flex flex-col gap-4 mb-6">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <Button disabled={busy !== null} onClick={exportAllJson}>전체 내보내기 (JSON)</Button>
-            <label className="inline-flex items-center gap-2">
-              <input
-                type="file"
-                accept="application/json,.json"
-                onChange={async (e) => {
-                  const file = e.currentTarget.files?.[0] || null;
-                  await importAllJson(file);
-                  // allow selecting the same file again to retrigger onChange
-                  e.currentTarget.value = '';
-                }}
-                disabled={busy !== null}
-              />
+            <input
+              id="import-json"
+              type="file"
+              accept="application/json,.json"
+              className="sr-only"
+              onChange={async (e) => {
+                const file = e.currentTarget.files?.[0] || null;
+                await importAllJson(file);
+                // allow selecting the same file again to retrigger onChange
+                e.currentTarget.value = '';
+              }}
+              disabled={busy !== null}
+            />
+            <label htmlFor="import-json">
+              <Button variant="outline" disabled={busy !== null}>JSON 가져오기</Button>
             </label>
           </div>
           {status && <div className="text-sm text-gray-600">{status}</div>}
