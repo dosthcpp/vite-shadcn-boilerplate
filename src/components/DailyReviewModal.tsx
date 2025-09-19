@@ -90,14 +90,14 @@ const DailyReviewModal = ({
 
           <div className="space-y-3">
             {yesterdayTasks.map((task) => (
-              <div key={task.id} className="border rounded-lg p-3">
-                <div className={`border-l-4 ${getSubjectColor(task.subject)} pl-3`}>
-                  <div className="flex items-start gap-3">
+              <div key={task.id} className="border rounded-lg p-0">
+                <div className={`border-l-4 ${getSubjectColor(task.subject)} pl-3 py-3 px-3`}>
+                  <div className="flex items-center gap-3">
                     <Checkbox
                       id={task.id}
                       checked={completedTasks.includes(task.id)}
                       onCheckedChange={(checked) => handleTaskToggle(task.id, checked as boolean)}
-                      className="mt-1"
+                      className=""
                     />
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">

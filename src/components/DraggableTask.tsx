@@ -46,15 +46,15 @@ const DraggableTask = ({
         isDragging ? 'opacity-50 scale-95' : 'hover:shadow-md'
       } ${isCompleted ? 'bg-green-50 border-green-200' : 'bg-white'}`}
     >
-      <CardContent className="p-3">
-        <div className={`border-l-4 ${getSubjectColor(task.subject)} pl-3`}>
-          <div className="flex items-start gap-3">
-            <GripVertical className="h-4 w-4 text-gray-400 mt-1 flex-shrink-0" />
+      <CardContent className="p-0">
+        <div className={`border-l-4 ${getSubjectColor(task.subject)} pl-3 py-3 px-3`}>
+          <div className="flex items-center gap-3">
+            <GripVertical className="h-4 w-4 text-gray-400 flex-shrink-0" />
             <Checkbox
               id={task.id}
               checked={isCompleted}
               onCheckedChange={(checked) => onToggle(task.id, checked as boolean)}
-              className="mt-1 flex-shrink-0"
+              className="flex-shrink-0"
             />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1 flex-wrap">

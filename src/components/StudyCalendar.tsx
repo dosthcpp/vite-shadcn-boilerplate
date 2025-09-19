@@ -261,6 +261,10 @@ const StudyCalendar = () => {
       }
       
       setTasks(tasksByDate);
+      // Notify other parts (like useProgress) to recompute from DB after (re)seeding or reload
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('progress-updated'));
+      }
       console.log('Tasks loaded by date:', tasksByDate);
       console.log('=== LOADING TASKS END ===');
       
@@ -486,7 +490,7 @@ const StudyCalendar = () => {
       {/* Weekly Schedule */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 flex-wrap w-full">
+          <CardTitle className="flex items-center gap-2 flex-wrap w-full sm:items-center">
             <CalendarIcon className="h-5 w-5" />
             주간 학습 계획
             <Badge variant="secondary" className="ml-2 sm:ml-auto whitespace-nowrap">
@@ -503,7 +507,7 @@ const StudyCalendar = () => {
               
               return (
                 <div key={plan.date} className={`border rounded-lg p-4 ${isOverCapacity ? 'border-red-300 bg-red-50' : ''}`}>
-                  <div className="flex items-start justify-between mb-3 flex-wrap gap-y-2">
+                  <div className="flex justify-between mb-3 flex-wrap gap-y-2 items-start sm:items-center">
                     <div className="flex items-center gap-3 flex-wrap gap-y-2">
                       <h3 className="font-semibold text-lg">
                         {plan.date} ({plan.dayOfWeek})
