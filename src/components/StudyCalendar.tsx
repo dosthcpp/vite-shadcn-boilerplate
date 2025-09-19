@@ -39,6 +39,20 @@ const StudyCalendar = () => {
     })();
   }, []);
 
+  useEffect(() => {
+    const onRestored = async () => {
+      await loadTasks();
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('database-restored', onRestored as EventListener);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('database-restored', onRestored as EventListener);
+      }
+    };
+  }, []);
+
   const checkForDailyReview = async () => {
     const today = new Date();
     const todayString = getLocalDateString(today);

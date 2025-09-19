@@ -42,7 +42,7 @@ export const useProgress = () => {
         }
       };
 
-      // 각 과목의 총 태스크 수 계산 (스케줄 기준)
+      // 각 과목의 총 태스크 수 계산 (DB 기준, 없으면 스케줄 기준)
       const totalBySubjectId: { [key: string]: number } = {
         'credit-analyst': 0,
         'linear-algebra': 0,
@@ -58,10 +58,20 @@ export const useProgress = () => {
         return '';
       };
 
-      for (const plan of studySchedule.dailyPlans) {
-        for (const task of plan.tasks) {
-          const sid = nameToId(task.subject);
+      // 1) 우선 DB에서 실제 태스크를 카운트 (중복 ID/오버라이드 반영)
+      const allTasks = await studyDB.getAllTasks();
+      if (allTasks.length > 0) {
+        for (const t of allTasks) {
+          const sid = nameToId(t.subject);
           if (sid) totalBySubjectId[sid] = (totalBySubjectId[sid] || 0) + 1;
+        }
+      } else {
+        // 2) DB가 비어있으면 스케줄 정의로 카운트 (초기 상태)
+        for (const plan of studySchedule.dailyPlans) {
+          for (const task of plan.tasks) {
+            const sid = nameToId(task.subject);
+            if (sid) totalBySubjectId[sid] = (totalBySubjectId[sid] || 0) + 1;
+          }
         }
       }
 
@@ -121,10 +131,12 @@ export const useProgress = () => {
     const handler = () => { loadProgress(); };
     if (typeof window !== 'undefined') {
       window.addEventListener('progress-updated', handler as EventListener);
+      window.addEventListener('database-restored', handler as EventListener);
     }
     return () => {
       if (typeof window !== 'undefined') {
         window.removeEventListener('progress-updated', handler as EventListener);
+        window.removeEventListener('database-restored', handler as EventListener);
       }
     };
   }, []);

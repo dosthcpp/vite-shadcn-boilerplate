@@ -7,6 +7,7 @@ import { BookOpen, Calendar, TrendingUp, Clock } from 'lucide-react';
 import { useProgress } from '@/hooks/useProgress';
 import StudyCalendar from '@/components/StudyCalendar';
 import ProgressOverview from '@/components/ProgressOverview';
+import DataExportImport from '@/components/DataExportImport';
 
 export default function Index() {
   const { subjects, loading } = useProgress();
@@ -46,6 +47,9 @@ export default function Index() {
             신용분석사 시험 & AI대학원 준비 ({currentDate})
           </p>
         </div>
+
+        {/* Export / Import */}
+        <DataExportImport />
 
         {/* Overall Progress */}
         <Card className="mb-8 border-2 border-blue-100 shadow-lg">

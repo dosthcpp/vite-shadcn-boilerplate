@@ -147,11 +147,39 @@ class StudyDatabase extends Dexie {
     await this.tasks.clear();
   }
 
+  async clearAllProgress(): Promise<void> {
+    await this.progress.clear();
+  }
+
+  async clearAllDailyChecks(): Promise<void> {
+    await this.dailyChecks.clear();
+  }
+
   // 디버깅을 위한 모든 태스크 조회
   async getAllTasks(): Promise<TaskRecord[]> {
     const allTasks = await this.tasks.toArray();
     console.log('All tasks in database:', allTasks);
     return allTasks;
+  }
+
+  async getAllDailyChecks(): Promise<DailyCheckRecord[]> {
+    const all = await this.dailyChecks.toArray();
+    return all;
+  }
+
+  async bulkSaveTasks(records: TaskRecord[]): Promise<void> {
+    if (!records || records.length === 0) return;
+    await this.tasks.bulkPut(records);
+  }
+
+  async bulkSaveProgress(records: ProgressRecord[]): Promise<void> {
+    if (!records || records.length === 0) return;
+    await this.progress.bulkPut(records);
+  }
+
+  async bulkSaveDailyChecks(records: DailyCheckRecord[]): Promise<void> {
+    if (!records || records.length === 0) return;
+    await this.dailyChecks.bulkPut(records);
   }
 }
 
