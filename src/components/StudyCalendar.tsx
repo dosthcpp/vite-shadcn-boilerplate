@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Clock, BookOpen, Calendar as CalendarIcon, RefreshCw } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Clock, BookOpen, Calendar as CalendarIcon } from 'lucide-react';
 import { studySchedule } from '@/data/studyPlan';
 import { useProgress } from '@/hooks/useProgress';
 import { studyDB, TaskRecord } from '@/lib/database';
@@ -30,6 +29,8 @@ const StudyCalendar = () => {
   const [yesterdayTasks, setYesterdayTasks] = useState<TaskRecord[]>([]);
   const [yesterdayDate, setYesterdayDate] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [editingCapacityDate, setEditingCapacityDate] = useState<string | null>(null);
+  const [capacityValue, setCapacityValue] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -256,10 +257,7 @@ const StudyCalendar = () => {
     }
   };
 
-  const handleManualRefresh = async () => {
-    console.log('Manual refresh triggered');
-    await loadTasks();
-  };
+  
 
   const getSubjectId = (subjectName: string) => {
     const subjectMap: { [key: string]: string } = {
@@ -324,6 +322,27 @@ const StudyCalendar = () => {
       case '확률과통계': return 'border-l-orange-500';
       default: return 'border-l-gray-500';
     }
+  };
+
+  const beginEditCapacity = (date: string, current: number) => {
+    setEditingCapacityDate(date);
+    setCapacityValue(String(current));
+  };
+
+  const cancelEditCapacity = () => {
+    setEditingCapacityDate(null);
+    setCapacityValue('');
+  };
+
+  const saveEditCapacity = (date: string) => {
+    const newVal = parseFloat(capacityValue);
+    if (!isNaN(newVal) && newVal > 0) {
+      const plan = studySchedule.dailyPlans.find(p => p.date === date);
+      if (plan) {
+        plan.totalHours = Math.round(newVal * 100) / 100;
+      }
+    }
+    cancelEditCapacity();
   };
 
   // Get today's date and calculate the range
@@ -486,11 +505,36 @@ const StudyCalendar = () => {
                         <Badge variant="destructive">시간 초과</Badge>
                       )}
                     </div>
-                    <div className="flex items-center gap-1 text-sm text-gray-600">
+                    <div className="flex items-center gap-2 text-sm text-gray-600 select-none">
                       <Clock className="h-4 w-4" />
-                      <span className={isOverCapacity ? 'text-red-600 font-bold' : ''}>
-                        {totalDuration.toFixed(1)}/{plan.totalHours}시간
-                      </span>
+                      {editingCapacityDate === plan.date ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-500">{totalDuration.toFixed(1)}/</span>
+                          <input
+                            autoFocus
+                            type="number"
+                            step="0.25"
+                            min="0.25"
+                            className="w-20 px-2 py-1 border rounded text-gray-900"
+                            value={capacityValue}
+                            onChange={(e) => setCapacityValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') saveEditCapacity(plan.date);
+                              if (e.key === 'Escape') cancelEditCapacity();
+                            }}
+                            onBlur={() => saveEditCapacity(plan.date)}
+                          />
+                          <span className="text-gray-500">시간</span>
+                        </div>
+                      ) : (
+                        <span
+                          title="더블클릭하여 일일 최대 시간 수정"
+                          onDoubleClick={() => beginEditCapacity(plan.date, plan.totalHours)}
+                          className={isOverCapacity ? 'text-red-600 font-bold cursor-text' : 'cursor-text'}
+                        >
+                          {totalDuration.toFixed(1)}/{plan.totalHours}시간
+                        </span>
+                      )}
                     </div>
                   </div>
                   
