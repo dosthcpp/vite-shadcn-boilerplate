@@ -106,7 +106,11 @@ export class ScheduleManager {
 
   // 시작 날짜부터 앞으로만 순차적으로 넘기는 캐스케이드 리밸런싱
   // preferredMoveIds: 해당 날짜에서 우선적으로 내보낼 태스크 ID 목록 (예: 원래 오늘 태스크)
-  async cascadeFrom(startDate: string, preferredMoveIds: string[] = []): Promise<void> {
+  async cascadeFrom(
+    startDate: string,
+    preferredMoveIds: string[] = [],
+    pinOnDate?: { date: string; taskIds: string[] }
+  ): Promise<void> {
     try {
       // startDate가 포함된 인덱스부터 끝까지 순회하며 초과분을 다음날로 이동
       let index = studySchedule.dailyPlans.findIndex(p => p.date === startDate);
@@ -148,17 +152,17 @@ export class ScheduleManager {
       }
 
       // 초과분 전파 후, 빈 용량을 앞당겨 채워서 빽빽하게 만들기
-      await this.compactFrom(startDate);
+      await this.compactFrom(startDate, pinOnDate);
 
-      // 마지막으로 전 구간을 전역 순서에 맞춰 재분배하여 순서를 보정
-      await this.reorderFrom(startDate);
+      // 마지막으로 전 구간을 전역 순서에 맞춰 재분배하되, 고정된 태스크는 해당 날짜에 유지
+      await this.reorderFrom(startDate, pinOnDate);
     } catch (error) {
       console.error('Error cascading schedule:', error);
     }
   }
 
   // 용량이 남는 날에 대해 다음날의 가장 이른 태스크부터 당겨와 채우기 (빽빽하게)
-  private async compactFrom(startDate: string): Promise<void> {
+  private async compactFrom(startDate: string, pinOnDate?: { date: string; taskIds: string[] }): Promise<void> {
     try {
       let startIndex = studySchedule.dailyPlans.findIndex(p => p.date === startDate);
       if (startIndex < 0) startIndex = 0;
@@ -178,7 +182,10 @@ export class ScheduleManager {
         if (available <= 0 || nextTasks.length === 0) continue;
 
         // 다음날 태스크를 원래 계획 순서대로 정렬 (가장 이른 것부터 당김)
-        const sortedNext = [...nextTasks].sort((a, b) => this.getTaskOrderIndex(a) - this.getTaskOrderIndex(b));
+        const sortedNext = [...nextTasks]
+          // 핀으로 고정된 날짜(nextPlan)에 묶여있는 태스크는 제외
+          .filter(t => !(pinOnDate && pinOnDate.date === nextPlan.date && pinOnDate.taskIds.includes(t.id)))
+          .sort((a, b) => this.getTaskOrderIndex(a) - this.getTaskOrderIndex(b));
 
         for (const t of sortedNext) {
           if (available <= 0) break;
@@ -194,7 +201,7 @@ export class ScheduleManager {
   }
 
   // 전역 순서를 보장하도록 startDate 이후의 모든 태스크를 공부 순서대로 다시 채움
-  private async reorderFrom(startDate: string): Promise<void> {
+  private async reorderFrom(startDate: string, pinOnDate?: { date: string; taskIds: string[] }): Promise<void> {
     try {
       let startIndex = studySchedule.dailyPlans.findIndex(p => p.date === startDate);
       if (startIndex < 0) startIndex = 0;
@@ -210,19 +217,43 @@ export class ScheduleManager {
       // 2) 전역 순서대로 정렬
       collected.sort((a, b) => this.getTaskOrderIndex(a) - this.getTaskOrderIndex(b));
 
+      // 핀 고정된 태스크는 해당 날짜에 남겨두고, 채울 때 제외
+      const pinnedDate = pinOnDate?.date;
+      const pinnedIds = new Set<string>(pinOnDate?.taskIds || []);
+
       // 3) 용량에 맞춰 앞에서부터 재배치
       let cursor = 0;
       for (let i = startIndex; i < studySchedule.dailyPlans.length; i++) {
         const plan = studySchedule.dailyPlans[i];
         let remaining = plan.totalHours;
 
+        // 먼저 이 날짜에 고정된 태스크의 시간을 차감하고, 필요 시 위치 보정
+        if (pinnedDate && plan.date === pinnedDate && pinnedIds.size > 0) {
+          const currentTasksAtDate = await studyDB.getTasksForDate(plan.date);
+          let pinnedTime = 0;
+          for (const t of currentTasksAtDate) {
+            if (pinnedIds.has(t.id)) pinnedTime += t.duration;
+          }
+          remaining -= pinnedTime;
+          if (remaining < 0) remaining = 0; // 초과는 이후 단계에서 자연스럽게 전파됨
+        }
+
         // 현재 날짜에 이미 있는 태스크는 무시하고 전체에서 재할당
-        while (cursor < collected.length && collected[cursor].duration <= remaining) {
+        while (cursor < collected.length) {
           const t = collected[cursor];
-          cursor++;
-          remaining -= t.duration;
-          if (t.date !== plan.date) {
-            await studyDB.moveTaskToDate(t.id, plan.date);
+          // 핀으로 고정된 태스크는 재할당 대상에서 제외
+          if (pinnedIds.has(t.id)) {
+            cursor++;
+            continue;
+          }
+          if (t.duration <= remaining) {
+            cursor++;
+            remaining -= t.duration;
+            if (t.date !== plan.date) {
+              await studyDB.moveTaskToDate(t.id, plan.date);
+            }
+          } else {
+            break;
           }
         }
       }

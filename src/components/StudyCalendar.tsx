@@ -32,6 +32,7 @@ const StudyCalendar = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [editingCapacityDate, setEditingCapacityDate] = useState<string | null>(null);
   const [capacityValue, setCapacityValue] = useState('');
+  const [mobileDraggingTaskId, setMobileDraggingTaskId] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -505,6 +506,100 @@ const StudyCalendar = () => {
     try { e.dataTransfer.dropEffect = 'move'; } catch {}
   };
 
+  // Mobile: start/stop drag and drop onto containers or tasks
+  const handleMobileDragStart = (taskId: string) => {
+    setMobileDraggingTaskId(taskId);
+  };
+  const handleMobileDropOnTask = async (targetTaskId: string, _targetDate: string) => {
+    if (!mobileDraggingTaskId || mobileDraggingTaskId === targetTaskId) return;
+    // reuse swap logic
+    const fakeEvent: any = { preventDefault: () => {} , dataTransfer: { getData: () => mobileDraggingTaskId } };
+    await handleDropOnTask(targetTaskId, _targetDate, fakeEvent);
+    setMobileDraggingTaskId(null);
+  };
+  const handleMobileDropOnDate = async (targetDate: string) => {
+    if (!mobileDraggingTaskId) return;
+    // move into date container logic
+    const fakeEvent: any = { preventDefault: () => {}, dataTransfer: { getData: () => mobileDraggingTaskId } };
+    await handleDrop(fakeEvent, targetDate);
+    setMobileDraggingTaskId(null);
+  };
+
+  const handleDropOnTask = async (targetTaskId: string, _targetDate: string, e: React.DragEvent) => {
+    e.preventDefault();
+    const draggedTaskId = e.dataTransfer.getData('text/plain');
+    if (!draggedTaskId || draggedTaskId === targetTaskId) return;
+
+    // 스왑: 드래그한 태스크와 타겟 태스크의 날짜를 교환
+    const dragged = await studyDB.tasks.get(draggedTaskId);
+    const target = await studyDB.tasks.get(targetTaskId);
+    if (!dragged || !target) return;
+
+    // 타겟 태스크가 완료된 경우: 스왑하지 않고, 드래그한 태스크만 타겟 날짜로 이동
+    const targetCompleted = isTaskCompleted(targetTaskId, target.subject);
+    if (targetCompleted) {
+      const targetDateNow = target.date;
+      await studyDB.moveTaskToDate(draggedTaskId, targetDateNow);
+      const targetSideTasksNow = await studyDB.getTasksForDate(targetDateNow);
+      const completedPinnedIds = targetSideTasksNow
+        .filter(t => isTaskCompleted(t.id, t.subject))
+        .map(t => t.id);
+      const pinIds = Array.from(new Set([draggedTaskId, ...completedPinnedIds]));
+      const preferEvictIds = targetSideTasksNow
+        .filter(t => !pinIds.includes(t.id))
+        .map(t => t.id);
+      await scheduleManager.cascadeFrom(targetDateNow, preferEvictIds, { date: targetDateNow, taskIds: pinIds });
+      try {
+        const allTasks = await studyDB.getAllTasks();
+        const allProgress = await studyDB.getAllProgress();
+        const allDaily = await studyDB.getAllDailyChecks();
+        const deviceId = getDeviceId();
+        await pushSnapshot('default-user', { tasks: allTasks, progress: allProgress, dailyChecks: allDaily }, { deviceId });
+      } catch {}
+      await loadTasks();
+      return;
+    }
+
+    const sourceDate = dragged.date;
+    const targetDateNow = target.date; // 신뢰
+    if (sourceDate === targetDateNow) return; // 같은 날짜면 스왑 불필요 (현재는 순서 변경 미지원)
+
+    // 1) 날짜 교환
+    await studyDB.moveTaskToDate(draggedTaskId, targetDateNow);
+    await studyDB.moveTaskToDate(targetTaskId, sourceDate);
+
+    // 2) 두 날짜 각각 리밸런싱: 각각의 고정 태스크를 해당 날짜에 유지하고, 기존 태스크를 우선 퇴출
+    const targetSideTasks = await studyDB.getTasksForDate(targetDateNow);
+    const sourceSideTasks = await studyDB.getTasksForDate(sourceDate);
+    const targetCompletedPinned = targetSideTasks.filter(t => isTaskCompleted(t.id, t.subject)).map(t => t.id);
+    const sourceCompletedPinned = sourceSideTasks.filter(t => isTaskCompleted(t.id, t.subject)).map(t => t.id);
+    const pinAtTarget = Array.from(new Set([draggedTaskId, ...targetCompletedPinned]));
+    const pinAtSource = Array.from(new Set([targetTaskId, ...sourceCompletedPinned]));
+    const preferEvictAtTarget = targetSideTasks.filter(t => !pinAtTarget.includes(t.id)).map(t => t.id);
+    const preferEvictAtSource = sourceSideTasks.filter(t => !pinAtSource.includes(t.id)).map(t => t.id);
+
+    // 먼저 더 이른 날짜부터 전파
+    const earlierDate = sourceDate < targetDateNow ? sourceDate : targetDateNow;
+
+    if (earlierDate === targetDateNow) {
+      await scheduleManager.cascadeFrom(targetDateNow, preferEvictAtTarget, { date: targetDateNow, taskIds: pinAtTarget });
+      await scheduleManager.cascadeFrom(sourceDate, preferEvictAtSource, { date: sourceDate, taskIds: pinAtSource });
+    } else {
+      await scheduleManager.cascadeFrom(sourceDate, preferEvictAtSource, { date: sourceDate, taskIds: pinAtSource });
+      await scheduleManager.cascadeFrom(targetDateNow, preferEvictAtTarget, { date: targetDateNow, taskIds: pinAtTarget });
+    }
+
+    // 3) 동기화 후 리로드
+    try {
+      const allTasks = await studyDB.getAllTasks();
+      const allProgress = await studyDB.getAllProgress();
+      const allDaily = await studyDB.getAllDailyChecks();
+      const deviceId = getDeviceId();
+      await pushSnapshot('default-user', { tasks: allTasks, progress: allProgress, dailyChecks: allDaily }, { deviceId });
+    } catch {}
+    await loadTasks();
+  };
+
   const handleDrop = async (e: React.DragEvent, targetDate: string) => {
     e.preventDefault();
     const taskId = e.dataTransfer.getData('text/plain');
@@ -513,7 +608,16 @@ const StudyCalendar = () => {
       // 타겟 날짜로 이동
       await studyDB.moveTaskToDate(taskId, targetDate);
       // 타겟 날짜 리밸런싱 (초과 시 미래로 자동 밀림)
-      await scheduleManager.rebalanceDate(targetDate);
+      // 방금 옮긴 태스크는 targetDate에 고정하고, 기존 targetDate 태스크들을 우선 내보내도록 설정
+      const originalTargetTasks = await studyDB.getTasksForDate(targetDate);
+      const completedPinnedIds = originalTargetTasks
+        .filter(t => isTaskCompleted(t.id, t.subject))
+        .map(t => t.id);
+      const pinnedOnTarget = Array.from(new Set([taskId, ...completedPinnedIds]));
+      const preferEvictIds = originalTargetTasks
+        .filter(t => !pinnedOnTarget.includes(t.id))
+        .map(t => t.id);
+      await scheduleManager.cascadeFrom(targetDate, preferEvictIds, { date: targetDate, taskIds: pinnedOnTarget });
       // Push snapshot FIRST so subsequent cloud-first reload reflects the move
       try {
         const allTasks = await studyDB.getAllTasks();
@@ -585,6 +689,17 @@ const StudyCalendar = () => {
   const startIndex = todayIndex >= 0 ? todayIndex : 0; // If today not found, start from beginning
   const endIndex = Math.min(startIndex + 14, studySchedule.dailyPlans.length); // Show 14 days or until end
   const displayPlans = studySchedule.dailyPlans.slice(startIndex, endIndex);
+
+  // 예상 완강 날짜 - 과목별 (복습 제외, 미완료 태스크의 마지막 날짜)
+  const allTasksFlat: TaskRecord[] = Object.values(tasks).flat();
+  const subjectsInTasks = Array.from(new Set(allTasksFlat.map(t => t.subject)));
+  const predictedFinishBySubject: { [subject: string]: string | null } = {};
+  for (const subjectName of subjectsInTasks) {
+    const remaining = allTasksFlat.filter(t => t.subject === subjectName && t.type !== 'review' && !isTaskCompleted(t.id, t.subject));
+    predictedFinishBySubject[subjectName] = remaining.length
+      ? remaining.reduce((max, t) => (t.date > max ? t.date : max), remaining[0].date)
+      : null; // 남은 강의가 없으면 null로 표시 (완강)
+  }
 
   return (
     <div className="space-y-6">
@@ -675,6 +790,7 @@ const StudyCalendar = () => {
                 className="space-y-3 min-h-[100px] p-2 border-2 border-dashed border-blue-300 rounded-lg bg-blue-25"
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, today)}
+                onTouchEnd={() => handleMobileDropOnDate(today)}
               >
                 {todayTasks.map((task) => (
                   <DraggableTask
@@ -686,6 +802,10 @@ const StudyCalendar = () => {
                     onDragEnd={handleDragEnd}
                     getSubjectColor={getSubjectColor}
                     getTypeColor={getTypeColor}
+                    onDropOnTask={handleDropOnTask}
+                    onMobileDragStart={handleMobileDragStart}
+                    onMobileDropOnTask={handleMobileDropOnTask}
+                    isMobileDragging={mobileDraggingTaskId !== null}
                   />
                 ))}
                 {todayTasks.length === 0 && (
@@ -708,6 +828,13 @@ const StudyCalendar = () => {
             <Badge variant="secondary" className="ml-2 sm:ml-auto whitespace-nowrap">
               {startIndex + 1}일차 ~ {endIndex}일차
             </Badge>
+            <div className="flex gap-2 flex-wrap ml-2">
+              {Object.entries(predictedFinishBySubject).map(([subjectName, dateStr]) => (
+                <Badge key={subjectName} className="whitespace-nowrap" title="복습 제외, 미완료 기준">
+                  {subjectName}: {dateStr ?? '완강 완료'}
+                </Badge>
+              ))}
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -772,6 +899,7 @@ const StudyCalendar = () => {
                     className="space-y-2 min-h-[80px] p-2 border-2 border-dashed border-gray-200 rounded-lg bg-gray-25"
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDrop(e, plan.date)}
+                    onTouchEnd={() => handleMobileDropOnDate(plan.date)}
                   >
                     {planTasks.map((task) => (
                       <DraggableTask
@@ -783,6 +911,10 @@ const StudyCalendar = () => {
                         onDragEnd={handleDragEnd}
                         getSubjectColor={getSubjectColor}
                         getTypeColor={getTypeColor}
+                        onDropOnTask={handleDropOnTask}
+                        onMobileDragStart={handleMobileDragStart}
+                        onMobileDropOnTask={handleMobileDropOnTask}
+                        isMobileDragging={mobileDraggingTaskId !== null}
                       />
                     ))}
                     {planTasks.length === 0 && (
