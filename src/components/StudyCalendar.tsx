@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { DndContext, PointerSensor, TouchSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { Badge } from '@/components/ui/badge';
 import { Clock, BookOpen, Calendar as CalendarIcon } from 'lucide-react';
 import { studySchedule } from '@/data/studyPlan';
@@ -681,7 +682,32 @@ const StudyCalendar = () => {
       : null; // 남은 강의가 없으면 null로 표시 (완강)
   }
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor)
+  );
+
   return (
+    <DndContext sensors={sensors}
+      onDragEnd={async (event: DragEndEvent) => {
+        const active = event.active?.id as string | undefined;
+        const over = event.over?.id as string | undefined;
+        if (!active || !over) return;
+        // active id: task:ID
+        // over id could be: task:ID or date:YYYY-MM-DD
+        const [activeType, activeId] = active.split(':');
+        const [overType, overId] = over.split(':');
+        if (activeType !== 'task') return;
+        if (overType === 'task') {
+          // swap via existing handler; craft a minimal synthetic event
+          const fakeEvent: any = { preventDefault: () => {}, dataTransfer: { getData: () => activeId } };
+          await handleDropOnTask(overId, '', fakeEvent);
+        } else if (overType === 'date') {
+          const fakeEvent: any = { preventDefault: () => {}, dataTransfer: { getData: () => activeId } };
+          await handleDrop(fakeEvent, overId);
+        }
+      }}
+    >
     <div className="space-y-6">
       {/* Daily Review Modal */}
       <DailyReviewModal
@@ -766,7 +792,7 @@ const StudyCalendar = () => {
                 {/* Holiday badge omitted to avoid type dependency */}
               </div>
               
-              <div
+              <div id={`date-container-${today}`}
                 className="space-y-3 min-h-[100px] p-2 border-2 border-dashed border-blue-300 rounded-lg bg-blue-25"
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, today)}
@@ -871,7 +897,7 @@ const StudyCalendar = () => {
                     </div>
                   </div>
                   
-                  <div
+                  <div id={`date-container-${plan.date}`}
                     className="space-y-2 min-h-[80px] p-2 border-2 border-dashed border-gray-200 rounded-lg bg-gray-25"
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDrop(e, plan.date)}
@@ -902,6 +928,7 @@ const StudyCalendar = () => {
         </CardContent>
       </Card>
     </div>
+    </DndContext>
   );
 };
 

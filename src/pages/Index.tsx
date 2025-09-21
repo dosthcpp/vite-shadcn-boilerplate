@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -11,6 +13,7 @@ import DataExportImport from '@/components/DataExportImport';
 export default function Index() {
   const { subjects, loading } = useProgress();
   const [currentDate, setCurrentDate] = useState('');
+  const navigate = useNavigate();
 
   useEffect(() => {
     // Set current date dynamically
@@ -38,13 +41,27 @@ export default function Index() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       <div className="container mx-auto px-3 py-6 sm:px-4 sm:py-8">
         {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
-            학습 관리 시스템
-          </h1>
-          <p className="text-gray-600">
-            신용분석사 시험 & AI대학원 준비 ({currentDate})
-          </p>
+        <div className="mb-8">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="text-center sm:text-left">
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
+                학습 관리 시스템
+              </h1>
+              <p className="text-gray-600">
+                신용분석사 시험 & AI대학원 준비 ({currentDate})
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => {
+                localStorage.removeItem('auth-ok');
+                localStorage.removeItem('auth-exp');
+                navigate('/login', { replace: true });
+              }}
+            >
+              로그아웃
+            </Button>
+          </div>
         </div>
 
         {/* Export / Import */}

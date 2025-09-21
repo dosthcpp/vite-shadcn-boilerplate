@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -27,6 +28,10 @@ const DraggableTask = ({
   onDropOnTask
 }: DraggableTaskProps) => {
   const [isDragging, setIsDragging] = useState(false);
+  // dnd-kit: draggable and droppable
+  const draggableId = `task:${task.id}`;
+  const { attributes, listeners, setNodeRef: setDragRef, isDragging: isDraggingDnd } = useDraggable({ id: draggableId });
+  const { setNodeRef: setDropRef, isOver } = useDroppable({ id: draggableId });
 
   const handleDragStart = (e: React.DragEvent) => {
     setIsDragging(true);
@@ -40,16 +45,20 @@ const DraggableTask = ({
   };
 
   return (
-    <Card
-      draggable
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-      onDragOver={(e) => { try { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; } catch {} }}
-      onDrop={(e) => { if (onDropOnTask) { e.preventDefault(); e.stopPropagation(); onDropOnTask(task.id, task.date, e); } }}
-      className={`cursor-move transition-all duration-200 ${
-        isDragging ? 'opacity-50 scale-95' : 'hover:shadow-md'
-      } ${isCompleted ? 'bg-green-50 border-green-200' : 'bg-white'}`}
-    >
+    <div ref={setDropRef} className={isOver ? 'ring-2 ring-blue-300 rounded' : ''}>
+      <Card
+        ref={setDragRef as any}
+        draggable
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragOver={(e) => { try { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; } catch {} }}
+        onDrop={(e) => { if (onDropOnTask) { e.preventDefault(); e.stopPropagation(); onDropOnTask(task.id, task.date, e); } }}
+        className={`cursor-move transition-all duration-200 ${
+          (isDragging || isDraggingDnd) ? 'opacity-50 scale-95' : 'hover:shadow-md'
+        } ${isCompleted ? 'bg-green-50 border-green-200' : 'bg-white'}`}
+        {...listeners}
+        {...attributes}
+      >
       <CardContent className="p-0">
         <div className={`border-l-4 ${getSubjectColor(task.subject)} pl-3 py-3 px-3`}>
           <div className="flex items-center gap-3">
@@ -65,12 +74,12 @@ const DraggableTask = ({
                 <span className={`font-medium text-sm ${isCompleted ? 'line-through text-gray-500' : 'text-gray-900'}`}>
                   {task.subject}
                 </span>
-                <Badge size="sm" className={getTypeColor(task.type)}>
+                <Badge className={getTypeColor(task.type)}>
                   {task.type === 'lecture' ? '강의' : 
                    task.type === 'review' ? '복습' : '문제풀이'}
                 </Badge>
                 {task.originalDate && task.originalDate !== task.date && (
-                  <Badge variant="outline" size="sm" className="text-xs">
+                  <Badge variant="outline" className="text-xs">
                     이동됨
                   </Badge>
                 )}
@@ -86,7 +95,8 @@ const DraggableTask = ({
           </div>
         </div>
       </CardContent>
-    </Card>
+      </Card>
+    </div>
   );
 };
 
