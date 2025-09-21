@@ -1,7 +1,7 @@
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import Index from './pages/Index';
 import Login from './pages/Login';
 import NotFound from './pages/NotFound';
@@ -28,14 +28,31 @@ const isAuthed = (): boolean => {
   return true;
 };
 
+const RequireAuth = () => {
+  const location = useLocation();
+  if (!isAuthed()) {
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  }
+  return <Outlet />;
+};
+
+const LoginGate = () => {
+  if (isAuthed()) {
+    return <Navigate to="/" replace />;
+  }
+  return <Login />;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <BrowserRouter>
         <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/" element={isAuthed() ? <Index /> : <Login />} />
+          <Route path="/login" element={<LoginGate />} />
+          <Route element={<RequireAuth />}>
+            <Route path="/" element={<Index />} />
+          </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

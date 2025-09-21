@@ -11,7 +11,8 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
 
   const expected = (import.meta as any).env?.VITE_PASSWORD as string | undefined;
-  const nextPath = (location.state as any)?.from || '/';
+  const state = location.state as any;
+  const nextPath = state?.from || '/';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
