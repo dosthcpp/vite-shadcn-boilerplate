@@ -65,7 +65,7 @@ const DraggableTask = ({
                   {task.type === 'lecture' ? '강의' : 
                    task.type === 'review' ? '복습' : '문제풀이'}
                 </Badge>
-                {task.original_date && task.original_date !== task.date && (
+                {task.originalDate && task.originalDate !== task.date && (
                   <Badge variant="outline" size="sm" className="text-xs">
                     이동됨
                   </Badge>

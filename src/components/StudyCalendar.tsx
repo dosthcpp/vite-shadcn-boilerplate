@@ -25,7 +25,7 @@ const StudyCalendar = () => {
   };
   const { subjects, toggleTask } = useProgress();
   const [tasks, setTasks] = useState<{ [date: string]: TaskRecord[] }>({});
-  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  // Drag state not needed; each task handles its own visual dragging state
   const [showDailyReview, setShowDailyReview] = useState(false);
   const [yesterdayTasks, setYesterdayTasks] = useState<TaskRecord[]>([]);
   const [yesterdayDate, setYesterdayDate] = useState('');
@@ -496,29 +496,25 @@ const StudyCalendar = () => {
     } catch {}
   };
 
-  const handleDragStart = (taskId: string) => {
-    setDraggedTaskId(taskId);
-  };
+  const handleDragStart = (_taskId: string) => {};
 
-  const handleDragEnd = () => {
-    setDraggedTaskId(null);
-  };
+  const handleDragEnd = () => {};
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
+    try { e.dataTransfer.dropEffect = 'move'; } catch {}
   };
 
   const handleDrop = async (e: React.DragEvent, targetDate: string) => {
     e.preventDefault();
     const taskId = e.dataTransfer.getData('text/plain');
     
-    if (taskId && draggedTaskId) {
+    if (taskId) {
       // 타겟 날짜로 이동
       await studyDB.moveTaskToDate(taskId, targetDate);
       // 타겟 날짜 리밸런싱 (초과 시 미래로 자동 밀림)
       await scheduleManager.rebalanceDate(targetDate);
-      await loadTasks(); // Reload tasks
-      // Push snapshot (best-effort)
+      // Push snapshot FIRST so subsequent cloud-first reload reflects the move
       try {
         const allTasks = await studyDB.getAllTasks();
         const allProgress = await studyDB.getAllProgress();
@@ -526,6 +522,8 @@ const StudyCalendar = () => {
         const deviceId = getDeviceId();
         await pushSnapshot('default-user', { tasks: allTasks, progress: allProgress, dailyChecks: allDaily }, { deviceId });
       } catch {}
+      // Reload tasks (cloud-first)
+      await loadTasks();
     }
   };
 
