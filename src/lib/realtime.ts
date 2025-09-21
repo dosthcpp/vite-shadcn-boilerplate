@@ -54,6 +54,40 @@ export async function pushSnapshot(userId: string, payload: { tasks: any[]; prog
   await setDoc(ref, { ...payload, updatedAt: Date.now(), source }, { merge: true });
 }
 
+export function getDeviceId(): string {
+  try {
+    let id = localStorage.getItem('device-id') || '';
+    if (!id && typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+      id = (crypto as any).randomUUID();
+      localStorage.setItem('device-id', id);
+    } else if (!id) {
+      id = String(Math.random()).slice(2);
+      localStorage.setItem('device-id', id);
+    }
+    return id;
+  } catch {
+    return 'unknown-device';
+  }
+}
+
+export async function pushProgressOnly(userId: string, progress: any[], source: { deviceId: string }) {
+  const database = getDB();
+  const ref = doc(database, 'schedules', userId);
+  await setDoc(ref, { progress, updatedAt: Date.now(), source }, { merge: true });
+}
+
+export async function pushDailyChecksOnly(userId: string, dailyChecks: any[], source: { deviceId: string }) {
+  const database = getDB();
+  const ref = doc(database, 'schedules', userId);
+  await setDoc(ref, { dailyChecks, updatedAt: Date.now(), source }, { merge: true });
+}
+
+export async function pushDaySettingsOnly(userId: string, daySettings: { date: string; totalHours: number }[], source: { deviceId: string }) {
+  const database = getDB();
+  const ref = doc(database, 'schedules', userId);
+  await setDoc(ref, { daySettings, updatedAt: Date.now(), source }, { merge: true });
+}
+
 export async function batchUpdateTasks(userId: string, records: { id: string; date: string }[]) {
   const database = getDB();
   const batch = writeBatch(database);

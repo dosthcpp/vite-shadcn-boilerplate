@@ -8,7 +8,7 @@ import { studyDB, TaskRecord } from '@/lib/database';
 import { scheduleManager } from '@/lib/scheduleManager';
 import DraggableTask from './DraggableTask';
 import DailyReviewModal from './DailyReviewModal';
-import { pushSnapshot, subscribeSchedule, getScheduleOnce } from '@/lib/realtime';
+import { pushSnapshot, subscribeSchedule, getScheduleOnce, getDeviceId, pushDaySettingsOnly } from '@/lib/realtime';
 
 const StudyCalendar = () => {
   const getLocalDateString = (date: Date) => {
@@ -40,31 +40,87 @@ const StudyCalendar = () => {
     })();
   }, []);
 
+  // One-time cleanup: remove legacy localStorage review flags so cloud/Dexie are authoritative
+  useEffect(() => {
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i) || '';
+        if (key.startsWith('daily-review-')) keysToRemove.push(key);
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+    } catch {}
+  }, []);
+
   // Realtime: apply incoming snapshots from Firestore (other devices)
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
     (async () => {
       try {
-        const deviceId = localStorage.getItem('device-id') || (() => { const id = crypto.randomUUID(); localStorage.setItem('device-id', id); return id; })();
+        const deviceId = getDeviceId();
         const unsub = await subscribeSchedule('default-user', async (payload: any) => {
           try {
             if (payload?.source?.deviceId === deviceId) return; // ignore own writes
             const tasksPayload = Array.isArray(payload?.tasks) ? payload.tasks : [];
             const progressPayload = Array.isArray(payload?.progress) ? payload.progress : [];
             const dailyPayload = Array.isArray(payload?.dailyChecks) ? payload.dailyChecks : [];
-            // Replace local with remote snapshot
-            await studyDB.clearAllTasks();
-            await studyDB.clearAllProgress();
-            await studyDB.clearAllDailyChecks();
-            if (tasksPayload.length) await studyDB.bulkSaveTasks(tasksPayload);
-            if (progressPayload.length) await studyDB.bulkSaveProgress(progressPayload.map((p: any) => ({
-              ...p,
-              lastUpdated: p.lastUpdated ? new Date(p.lastUpdated) : new Date(),
-            })));
-            if (dailyPayload.length) await studyDB.bulkSaveDailyChecks(dailyPayload.map((d: any) => ({
-              ...d,
-              checkedAt: d.checkedAt ? new Date(d.checkedAt) : new Date(),
-            })));
+            const daySettingsPayload = Array.isArray(payload?.daySettings) ? payload.daySettings : [];
+
+            // Merge strategy to avoid losing local state
+            const localTasks = await studyDB.getAllTasks();
+            if (localTasks.length === 0 && tasksPayload.length) {
+              await studyDB.bulkSaveTasks(tasksPayload);
+            }
+
+            if (progressPayload.length) {
+              const localProgress = await studyDB.getAllProgress();
+              const byId: Record<string, { id: string; subjectId: string; completedTasks: string[]; lastUpdated: Date }>
+                = Object.fromEntries(localProgress.map(p => [p.id, p]));
+              for (const p of progressPayload) {
+                const id = p.id || p.subjectId;
+                const existing = byId[id];
+                const remoteCompleted = Array.isArray(p.completedTasks) ? p.completedTasks : [];
+                const merged = Array.from(new Set([...(existing?.completedTasks || []), ...remoteCompleted]));
+                byId[id] = {
+                  id,
+                  subjectId: id,
+                  completedTasks: merged,
+                  lastUpdated: p.lastUpdated ? new Date(p.lastUpdated) : (existing?.lastUpdated || new Date())
+                };
+              }
+              await studyDB.clearAllProgress();
+              await studyDB.bulkSaveProgress(Object.values(byId));
+            }
+
+            if (dailyPayload.length) {
+              const localDaily = await studyDB.getAllDailyChecks();
+              const byDate: Record<string, { id: string; date: string; completedTasks: string[]; checkedAt: Date }>
+                = Object.fromEntries(localDaily.map(d => [d.id, d]));
+              for (const d of dailyPayload) {
+                const id = d.id || d.date;
+                const existing = byDate[id];
+                const remoteCompleted = Array.isArray(d.completedTasks) ? d.completedTasks : [];
+                const merged = Array.from(new Set([...(existing?.completedTasks || []), ...remoteCompleted]));
+                byDate[id] = {
+                  id,
+                  date: id,
+                  completedTasks: merged,
+                  checkedAt: d.checkedAt ? new Date(d.checkedAt) : (existing?.checkedAt || new Date())
+                };
+              }
+              await studyDB.clearAllDailyChecks();
+              await studyDB.bulkSaveDailyChecks(Object.values(byDate));
+            }
+            // Apply daySettings (totalHours) to local studySchedule
+            if (daySettingsPayload.length) {
+              for (const s of daySettingsPayload) {
+                const plan = studySchedule.dailyPlans.find(p => p.date === s?.date);
+                if (plan && typeof s?.totalHours === 'number') {
+                  plan.totalHours = Math.round(s.totalHours * 100) / 100;
+                }
+              }
+            }
+
             if (typeof window !== 'undefined') {
               window.dispatchEvent(new CustomEvent('progress-updated'));
               window.dispatchEvent(new CustomEvent('database-restored'));
@@ -101,6 +157,15 @@ const StudyCalendar = () => {
     const todayString = getLocalDateString(today);
     
     console.log('Checking for daily review from past dates...');
+    // Cloud-first: load dailyChecks from Firestore once
+    let cloudDailyReviewed: Set<string> = new Set();
+    try {
+      const payload = await getScheduleOnce('default-user');
+      const daily = Array.isArray(payload?.dailyChecks) ? payload.dailyChecks : [];
+      cloudDailyReviewed = new Set(daily.map((d: any) => d?.id || d?.date).filter(Boolean));
+    } catch (e) {
+      console.warn('getScheduleOnce failed; fallback to local sources only');
+    }
     
     // 30일 전부터 오늘까지 정순으로 과거 날짜들을 체크
     for (let i = 30; i >= 1; i--) { // 30일 전부터 1일 전까지
@@ -126,12 +191,16 @@ const StudyCalendar = () => {
       // 우선순위: 이전 날짜에서 들어온 태스크가 있으면 그것만, 없으면 해당 날짜 원래 태스크 전체
       const tasksToReview = earlierTasks.length > 0 ? earlierTasks : currentDateTasks;
       if (tasksToReview.length > 0) {
-        // 이미 리뷰를 했는지 localStorage에서 확인
-        const reviewKey = `daily-review-${checkDateString}`;
-        const hasReviewed = localStorage.getItem(reviewKey);
-        console.log(`Has reviewed ${checkDateString}:`, hasReviewed);
-        
-        if (!hasReviewed) {
+        // Review state priority: Cloud → Dexie (no localStorage fallback)
+        let reviewed = cloudDailyReviewed.has(checkDateString);
+        if (!reviewed) {
+          try {
+            const dc = await studyDB.getDailyCheck(checkDateString);
+            reviewed = !!dc;
+          } catch {}
+        }
+        console.log(`Has reviewed ${checkDateString}:`, reviewed);
+        if (!reviewed) {
           setYesterdayTasks(tasksToReview);
           setYesterdayDate(checkDateString);
           setShowDailyReview(true);
@@ -184,21 +253,23 @@ const StudyCalendar = () => {
         console.log('No incomplete tasks to move - all tasks were completed');
       }
 
-      // 리뷰 완료 표시
-      localStorage.setItem(`daily-review-${yesterdayDate}`, 'true');
+      // 리뷰 완료 표시 (Dexie only; syncing via Firestore)
+      try {
+        await studyDB.saveDailyCheck({ id: yesterdayDate, date: yesterdayDate, completedTasks, checkedAt: new Date() } as any);
+      } catch {}
       setShowDailyReview(false);
       
-      // 태스크 다시 로드
-      console.log('Reloading tasks after daily review...');
-      await loadTasks();
-      // Push snapshot
+      // Push snapshot (includes dailyChecks) BEFORE reload so cloud-first load sees it
       try {
         const allTasks = await studyDB.getAllTasks();
         const allProgress = await studyDB.getAllProgress();
         const allDaily = await studyDB.getAllDailyChecks();
-        const deviceId = localStorage.getItem('device-id') || '';
+        const deviceId = getDeviceId();
         await pushSnapshot('default-user', { tasks: allTasks, progress: allProgress, dailyChecks: allDaily }, { deviceId });
       } catch {}
+      // 태스크 다시 로드 (cloud-first)
+      console.log('Reloading tasks after daily review...');
+      await loadTasks();
       
       // 다음 미리뷰 날짜 체크
       console.log('Checking for next unreviewed date...');
@@ -237,21 +308,23 @@ const StudyCalendar = () => {
         console.log('No tasks to move');
       }
 
-      // 리뷰 완료 표시 (취소했더라도 다시 묻지 않음)
-      localStorage.setItem(`daily-review-${yesterdayDate}`, 'true');
+      // 리뷰 완료 표시 (취소했더라도 다시 묻지 않음) - Dexie only; syncing via Firestore
+      try {
+        await studyDB.saveDailyCheck({ id: yesterdayDate, date: yesterdayDate, completedTasks: [], checkedAt: new Date() } as any);
+      } catch {}
       setShowDailyReview(false);
       
-      // 태스크 다시 로드
-      console.log('Reloading tasks after cancel...');
-      await loadTasks();
-      // Push snapshot
+      // Push snapshot (includes dailyChecks) BEFORE reload so cloud-first load sees it
       try {
         const allTasks = await studyDB.getAllTasks();
         const allProgress = await studyDB.getAllProgress();
         const allDaily = await studyDB.getAllDailyChecks();
-        const deviceId = localStorage.getItem('device-id') || '';
+        const deviceId = getDeviceId();
         await pushSnapshot('default-user', { tasks: allTasks, progress: allProgress, dailyChecks: allDaily }, { deviceId });
       } catch {}
+      // 태스크 다시 로드 (cloud-first)
+      console.log('Reloading tasks after cancel...');
+      await loadTasks();
       
       // 다음 미리뷰 날짜 체크
       console.log('Checking for next unreviewed date...');
@@ -270,36 +343,61 @@ const StudyCalendar = () => {
     setIsLoading(true);
     
     try {
+      // Always pull Firestore snapshot first and treat as source of truth
+      let cloudApplied = false;
+      try {
+        const payload = await getScheduleOnce('default-user');
+        if (payload) {
+          const tasksPayload = Array.isArray(payload?.tasks) ? payload.tasks : [];
+          const progressPayload = Array.isArray(payload?.progress) ? payload.progress : [];
+          const dailyPayload = Array.isArray(payload?.dailyChecks) ? payload.dailyChecks : [];
+          const daySettingsPayload = Array.isArray(payload?.daySettings) ? payload.daySettings : [];
+          const hasAnyCloudData = (tasksPayload.length + progressPayload.length + dailyPayload.length) > 0;
+
+          // Apply day settings to local studySchedule
+          if (daySettingsPayload.length) {
+            for (const s of daySettingsPayload) {
+              const plan = studySchedule.dailyPlans.find(p => p.date === s?.date);
+              if (plan && typeof s?.totalHours === 'number') {
+                plan.totalHours = Math.round(s.totalHours * 100) / 100;
+              }
+            }
+          }
+
+          if (hasAnyCloudData) {
+            // Replace Dexie data with cloud snapshot
+            await studyDB.clearAllTasks();
+            await studyDB.clearAllProgress();
+            await studyDB.clearAllDailyChecks();
+            if (tasksPayload.length) await studyDB.bulkSaveTasks(tasksPayload);
+            if (progressPayload.length) await studyDB.bulkSaveProgress(progressPayload.map((p: any) => ({
+              id: p.id || p.subjectId,
+              subjectId: p.subjectId || p.id,
+              completedTasks: Array.isArray(p.completedTasks) ? p.completedTasks : [],
+              lastUpdated: p?.lastUpdated?.toDate ? p.lastUpdated.toDate() : (p.lastUpdated ? new Date(p.lastUpdated) : new Date()),
+            })));
+            if (dailyPayload.length) await studyDB.bulkSaveDailyChecks(dailyPayload.map((d: any) => ({
+              id: d.id || d.date,
+              date: d.date || d.id,
+              completedTasks: Array.isArray(d.completedTasks) ? d.completedTasks : [],
+              checkedAt: d?.checkedAt?.toDate ? d.checkedAt.toDate() : (d.checkedAt ? new Date(d.checkedAt) : new Date()),
+            })));
+            cloudApplied = true;
+          }
+        }
+      } catch (e) {
+        console.warn('cloud pull failed', e);
+      }
+
       // Get all tasks to detect empty DB state
       const allExisting = await studyDB.getAllTasks();
       let dbEmpty = (allExisting?.length || 0) === 0;
-      // If empty, try pulling Firestore snapshot first (cloud-first)
-      if (dbEmpty) {
-        try {
-          const payload = await getScheduleOnce('default-user');
-          if (payload) {
-            const tasksPayload = Array.isArray(payload?.tasks) ? payload.tasks : [];
-            const progressPayload = Array.isArray(payload?.progress) ? payload.progress : [];
-            const dailyPayload = Array.isArray(payload?.dailyChecks) ? payload.dailyChecks : [];
-            if (tasksPayload.length || progressPayload.length || dailyPayload.length) {
-              await studyDB.clearAllTasks();
-              await studyDB.clearAllProgress();
-              await studyDB.clearAllDailyChecks();
-              if (tasksPayload.length) await studyDB.bulkSaveTasks(tasksPayload);
-              if (progressPayload.length) await studyDB.bulkSaveProgress(progressPayload.map((p: any) => ({ ...p, lastUpdated: p.lastUpdated ? new Date(p.lastUpdated) : new Date() })));
-              if (dailyPayload.length) await studyDB.bulkSaveDailyChecks(dailyPayload.map((d: any) => ({ ...d, checkedAt: d.checkedAt ? new Date(d.checkedAt) : new Date() })));
-              dbEmpty = false;
-            }
-          }
-        } catch (e) {
-          console.warn('cloud-first pull failed', e);
-        }
-      }
       
       // Initialize tasks from studySchedule only once
       const initFlagKey = 'study-db-initialized';
       const isInitialized = localStorage.getItem(initFlagKey) === 'true';
-      const shouldSeed = !isInitialized || dbEmpty;
+      // Seed only if cloud had nothing and local DB is empty
+      const shouldSeed = (!cloudApplied) && (!isInitialized || dbEmpty);
       
       const clearDailyReviewKeys = () => {
         const keysToRemove: string[] = [];
@@ -342,14 +440,17 @@ const StudyCalendar = () => {
       }
       
       setTasks(tasksByDate);
-      // Firestore: push snapshot for other devices (best-effort)
-      try {
-        const allTasks = await studyDB.getAllTasks();
-        const allProgress = await studyDB.getAllProgress();
-        const allDaily = await studyDB.getAllDailyChecks();
-        const deviceId = localStorage.getItem('device-id') || (() => { const id = crypto.randomUUID(); localStorage.setItem('device-id', id); return id; })();
-        await pushSnapshot('default-user', { tasks: allTasks, progress: allProgress, dailyChecks: allDaily }, { deviceId });
-      } catch (e) { /* ignore */ }
+      // If we seeded because cloud was empty, publish seed to cloud so next loads use Firebase
+      if (shouldSeed) {
+        try {
+          const allTasksNow = await studyDB.getAllTasks();
+          const allProgressNow = await studyDB.getAllProgress();
+          const allDailyNow = await studyDB.getAllDailyChecks();
+          const deviceId = getDeviceId();
+          await pushSnapshot('default-user', { tasks: allTasksNow, progress: allProgressNow, dailyChecks: allDailyNow }, { deviceId });
+        } catch {}
+      }
+      // Avoid pushing from load to prevent loops on mobile
       // Notify other parts (like useProgress) to recompute from DB after (re)seeding or reload
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('progress-updated'));
@@ -385,6 +486,14 @@ const StudyCalendar = () => {
   const handleTaskToggle = async (taskId: string, subjectName: string, checked: boolean) => {
     const subjectId = getSubjectId(subjectName);
     await toggleTask(taskId, subjectId, checked);
+    // Push snapshot so other devices reflect the change
+    try {
+      const allTasks = await studyDB.getAllTasks();
+      const allProgress = await studyDB.getAllProgress();
+      const allDaily = await studyDB.getAllDailyChecks();
+      const deviceId = getDeviceId();
+      await pushSnapshot('default-user', { tasks: allTasks, progress: allProgress, dailyChecks: allDaily }, { deviceId });
+    } catch {}
   };
 
   const handleDragStart = (taskId: string) => {
@@ -414,7 +523,7 @@ const StudyCalendar = () => {
         const allTasks = await studyDB.getAllTasks();
         const allProgress = await studyDB.getAllProgress();
         const allDaily = await studyDB.getAllDailyChecks();
-        const deviceId = localStorage.getItem('device-id') || '';
+        const deviceId = getDeviceId();
         await pushSnapshot('default-user', { tasks: allTasks, progress: allProgress, dailyChecks: allDaily }, { deviceId });
       } catch {}
     }
@@ -455,6 +564,14 @@ const StudyCalendar = () => {
       const plan = studySchedule.dailyPlans.find(p => p.date === date);
       if (plan) {
         plan.totalHours = Math.round(newVal * 100) / 100;
+        // Sync day settings to cloud
+        try {
+          const deviceId = getDeviceId();
+          // Await to ensure the write is actually sent
+          (async () => {
+            await pushDaySettingsOnly('default-user', [{ date, totalHours: plan.totalHours }], { deviceId });
+          })();
+        } catch {}
       }
     }
     cancelEditCapacity();
