@@ -8,6 +8,7 @@ import { studyDB, TaskRecord } from '@/lib/database';
 import { scheduleManager } from '@/lib/scheduleManager';
 import DraggableTask from './DraggableTask';
 import DailyReviewModal from './DailyReviewModal';
+import { pushSnapshot, subscribeSchedule, getScheduleOnce } from '@/lib/realtime';
 
 const StudyCalendar = () => {
   const getLocalDateString = (date: Date) => {
@@ -37,6 +38,48 @@ const StudyCalendar = () => {
       await loadTasks();
       await checkForDailyReview();
     })();
+  }, []);
+
+  // Realtime: apply incoming snapshots from Firestore (other devices)
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+    (async () => {
+      try {
+        const deviceId = localStorage.getItem('device-id') || (() => { const id = crypto.randomUUID(); localStorage.setItem('device-id', id); return id; })();
+        const unsub = await subscribeSchedule('default-user', async (payload: any) => {
+          try {
+            if (payload?.source?.deviceId === deviceId) return; // ignore own writes
+            const tasksPayload = Array.isArray(payload?.tasks) ? payload.tasks : [];
+            const progressPayload = Array.isArray(payload?.progress) ? payload.progress : [];
+            const dailyPayload = Array.isArray(payload?.dailyChecks) ? payload.dailyChecks : [];
+            // Replace local with remote snapshot
+            await studyDB.clearAllTasks();
+            await studyDB.clearAllProgress();
+            await studyDB.clearAllDailyChecks();
+            if (tasksPayload.length) await studyDB.bulkSaveTasks(tasksPayload);
+            if (progressPayload.length) await studyDB.bulkSaveProgress(progressPayload.map((p: any) => ({
+              ...p,
+              lastUpdated: p.lastUpdated ? new Date(p.lastUpdated) : new Date(),
+            })));
+            if (dailyPayload.length) await studyDB.bulkSaveDailyChecks(dailyPayload.map((d: any) => ({
+              ...d,
+              checkedAt: d.checkedAt ? new Date(d.checkedAt) : new Date(),
+            })));
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('progress-updated'));
+              window.dispatchEvent(new CustomEvent('database-restored'));
+            }
+            await loadTasks();
+          } catch (e) {
+            console.warn('apply remote snapshot failed', e);
+          }
+        });
+        unsubscribe = unsub;
+      } catch (e) {
+        console.warn('subscribeSchedule failed', e);
+      }
+    })();
+    return () => { if (typeof unsubscribe === 'function') unsubscribe(); };
   }, []);
 
   useEffect(() => {
@@ -148,6 +191,14 @@ const StudyCalendar = () => {
       // 태스크 다시 로드
       console.log('Reloading tasks after daily review...');
       await loadTasks();
+      // Push snapshot
+      try {
+        const allTasks = await studyDB.getAllTasks();
+        const allProgress = await studyDB.getAllProgress();
+        const allDaily = await studyDB.getAllDailyChecks();
+        const deviceId = localStorage.getItem('device-id') || '';
+        await pushSnapshot('default-user', { tasks: allTasks, progress: allProgress, dailyChecks: allDaily }, { deviceId });
+      } catch {}
       
       // 다음 미리뷰 날짜 체크
       console.log('Checking for next unreviewed date...');
@@ -193,6 +244,14 @@ const StudyCalendar = () => {
       // 태스크 다시 로드
       console.log('Reloading tasks after cancel...');
       await loadTasks();
+      // Push snapshot
+      try {
+        const allTasks = await studyDB.getAllTasks();
+        const allProgress = await studyDB.getAllProgress();
+        const allDaily = await studyDB.getAllDailyChecks();
+        const deviceId = localStorage.getItem('device-id') || '';
+        await pushSnapshot('default-user', { tasks: allTasks, progress: allProgress, dailyChecks: allDaily }, { deviceId });
+      } catch {}
       
       // 다음 미리뷰 날짜 체크
       console.log('Checking for next unreviewed date...');
@@ -213,7 +272,29 @@ const StudyCalendar = () => {
     try {
       // Get all tasks to detect empty DB state
       const allExisting = await studyDB.getAllTasks();
-      const dbEmpty = (allExisting?.length || 0) === 0;
+      let dbEmpty = (allExisting?.length || 0) === 0;
+      // If empty, try pulling Firestore snapshot first (cloud-first)
+      if (dbEmpty) {
+        try {
+          const payload = await getScheduleOnce('default-user');
+          if (payload) {
+            const tasksPayload = Array.isArray(payload?.tasks) ? payload.tasks : [];
+            const progressPayload = Array.isArray(payload?.progress) ? payload.progress : [];
+            const dailyPayload = Array.isArray(payload?.dailyChecks) ? payload.dailyChecks : [];
+            if (tasksPayload.length || progressPayload.length || dailyPayload.length) {
+              await studyDB.clearAllTasks();
+              await studyDB.clearAllProgress();
+              await studyDB.clearAllDailyChecks();
+              if (tasksPayload.length) await studyDB.bulkSaveTasks(tasksPayload);
+              if (progressPayload.length) await studyDB.bulkSaveProgress(progressPayload.map((p: any) => ({ ...p, lastUpdated: p.lastUpdated ? new Date(p.lastUpdated) : new Date() })));
+              if (dailyPayload.length) await studyDB.bulkSaveDailyChecks(dailyPayload.map((d: any) => ({ ...d, checkedAt: d.checkedAt ? new Date(d.checkedAt) : new Date() })));
+              dbEmpty = false;
+            }
+          }
+        } catch (e) {
+          console.warn('cloud-first pull failed', e);
+        }
+      }
       
       // Initialize tasks from studySchedule only once
       const initFlagKey = 'study-db-initialized';
@@ -261,6 +342,14 @@ const StudyCalendar = () => {
       }
       
       setTasks(tasksByDate);
+      // Firestore: push snapshot for other devices (best-effort)
+      try {
+        const allTasks = await studyDB.getAllTasks();
+        const allProgress = await studyDB.getAllProgress();
+        const allDaily = await studyDB.getAllDailyChecks();
+        const deviceId = localStorage.getItem('device-id') || (() => { const id = crypto.randomUUID(); localStorage.setItem('device-id', id); return id; })();
+        await pushSnapshot('default-user', { tasks: allTasks, progress: allProgress, dailyChecks: allDaily }, { deviceId });
+      } catch (e) { /* ignore */ }
       // Notify other parts (like useProgress) to recompute from DB after (re)seeding or reload
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('progress-updated'));
@@ -320,6 +409,14 @@ const StudyCalendar = () => {
       // 타겟 날짜 리밸런싱 (초과 시 미래로 자동 밀림)
       await scheduleManager.rebalanceDate(targetDate);
       await loadTasks(); // Reload tasks
+      // Push snapshot (best-effort)
+      try {
+        const allTasks = await studyDB.getAllTasks();
+        const allProgress = await studyDB.getAllProgress();
+        const allDaily = await studyDB.getAllDailyChecks();
+        const deviceId = localStorage.getItem('device-id') || '';
+        await pushSnapshot('default-user', { tasks: allTasks, progress: allProgress, dailyChecks: allDaily }, { deviceId });
+      } catch {}
     }
   };
 

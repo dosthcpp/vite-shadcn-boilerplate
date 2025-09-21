@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { studyDB } from '@/lib/database';
 import { studySchedule } from '@/data/studyPlan';
+import { subscribeSchedule } from '@/lib/realtime';
 
 export interface SubjectProgress {
   id: string;
@@ -127,6 +128,25 @@ export const useProgress = () => {
 
   useEffect(() => {
     loadProgress();
+    // Realtime sync listener (optional: gate behind env)
+    const userId = 'default-user';
+    let unsubscribe: (() => void) | undefined;
+    subscribeSchedule(userId, async (payload) => {
+      try {
+        if (payload?.progress) {
+          await studyDB.clearAllProgress();
+          await studyDB.bulkSaveProgress(payload.progress.map((p: any) => ({
+            ...p,
+            lastUpdated: p.lastUpdated ? new Date(p.lastUpdated) : new Date(),
+          })));
+        }
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('progress-updated'));
+        }
+      } catch (e) {
+        console.warn('realtime payload apply failed', e);
+      }
+    }).then((unsub) => { unsubscribe = unsub; }).catch(() => {});
     // 전역 진행도 업데이트 이벤트 수신하여 재로딩
     const handler = () => { loadProgress(); };
     if (typeof window !== 'undefined') {
@@ -138,6 +158,7 @@ export const useProgress = () => {
         window.removeEventListener('progress-updated', handler as EventListener);
         window.removeEventListener('database-restored', handler as EventListener);
       }
+      if (typeof unsubscribe === 'function') unsubscribe();
     };
   }, []);
 
