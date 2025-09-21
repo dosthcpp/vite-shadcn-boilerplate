@@ -32,7 +32,6 @@ const StudyCalendar = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [editingCapacityDate, setEditingCapacityDate] = useState<string | null>(null);
   const [capacityValue, setCapacityValue] = useState('');
-  const [mobileDraggingTaskId, setMobileDraggingTaskId] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -506,25 +505,6 @@ const StudyCalendar = () => {
     try { e.dataTransfer.dropEffect = 'move'; } catch {}
   };
 
-  // Mobile: start/stop drag and drop onto containers or tasks
-  const handleMobileDragStart = (taskId: string) => {
-    setMobileDraggingTaskId(taskId);
-  };
-  const handleMobileDropOnTask = async (targetTaskId: string, _targetDate: string) => {
-    if (!mobileDraggingTaskId || mobileDraggingTaskId === targetTaskId) return;
-    // reuse swap logic
-    const fakeEvent: any = { preventDefault: () => {} , dataTransfer: { getData: () => mobileDraggingTaskId } };
-    await handleDropOnTask(targetTaskId, _targetDate, fakeEvent);
-    setMobileDraggingTaskId(null);
-  };
-  const handleMobileDropOnDate = async (targetDate: string) => {
-    if (!mobileDraggingTaskId) return;
-    // move into date container logic
-    const fakeEvent: any = { preventDefault: () => {}, dataTransfer: { getData: () => mobileDraggingTaskId } };
-    await handleDrop(fakeEvent, targetDate);
-    setMobileDraggingTaskId(null);
-  };
-
   const handleDropOnTask = async (targetTaskId: string, _targetDate: string, e: React.DragEvent) => {
     e.preventDefault();
     const draggedTaskId = e.dataTransfer.getData('text/plain');
@@ -790,7 +770,6 @@ const StudyCalendar = () => {
                 className="space-y-3 min-h-[100px] p-2 border-2 border-dashed border-blue-300 rounded-lg bg-blue-25"
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, today)}
-                onTouchEnd={() => handleMobileDropOnDate(today)}
               >
                 {todayTasks.map((task) => (
                   <DraggableTask
@@ -803,9 +782,6 @@ const StudyCalendar = () => {
                     getSubjectColor={getSubjectColor}
                     getTypeColor={getTypeColor}
                     onDropOnTask={handleDropOnTask}
-                    onMobileDragStart={handleMobileDragStart}
-                    onMobileDropOnTask={handleMobileDropOnTask}
-                    isMobileDragging={mobileDraggingTaskId !== null}
                   />
                 ))}
                 {todayTasks.length === 0 && (
@@ -899,7 +875,6 @@ const StudyCalendar = () => {
                     className="space-y-2 min-h-[80px] p-2 border-2 border-dashed border-gray-200 rounded-lg bg-gray-25"
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDrop(e, plan.date)}
-                    onTouchEnd={() => handleMobileDropOnDate(plan.date)}
                   >
                     {planTasks.map((task) => (
                       <DraggableTask
@@ -912,9 +887,6 @@ const StudyCalendar = () => {
                         getSubjectColor={getSubjectColor}
                         getTypeColor={getTypeColor}
                         onDropOnTask={handleDropOnTask}
-                        onMobileDragStart={handleMobileDragStart}
-                        onMobileDropOnTask={handleMobileDropOnTask}
-                        isMobileDragging={mobileDraggingTaskId !== null}
                       />
                     ))}
                     {planTasks.length === 0 && (

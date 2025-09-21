@@ -127,7 +127,11 @@ export class ScheduleManager {
 
         // Decide which tasks to evict: later tasks (in study plan order) first.
         // Tasks in preferredMoveIds get an eviction bonus so they are evicted before others when tied.
-        const scored = currentTasks.map(t => {
+        const pinnedSet = new Set<string>(
+          pinOnDate && pinOnDate.date === currentPlan.date ? pinOnDate.taskIds : []
+        );
+        const candidates = currentTasks.filter(t => !pinnedSet.has(t.id));
+        const scored = candidates.map(t => {
           const order = this.getTaskOrderIndex(t);
           const bonus = preferredMoveIds.includes(t.id) ? 1000000 : 0; // large bonus to evict preferred first
           const evictScore = order + bonus; // larger score means more likely to evict (later tasks or preferred)

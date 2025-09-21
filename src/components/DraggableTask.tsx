@@ -14,10 +14,6 @@ interface DraggableTaskProps {
   getSubjectColor: (subject: string) => string;
   getTypeColor: (type: string) => string;
   onDropOnTask?: (targetTaskId: string, targetDate: string, e: React.DragEvent) => void;
-  // Mobile touch drag support
-  onMobileDragStart?: (taskId: string) => void;
-  onMobileDropOnTask?: (targetTaskId: string, targetDate: string) => void;
-  isMobileDragging?: boolean;
 }
 
 const DraggableTask = ({
@@ -28,20 +24,9 @@ const DraggableTask = ({
   onDragEnd,
   getSubjectColor,
   getTypeColor,
-  onDropOnTask,
-  onMobileDragStart,
-  onMobileDropOnTask,
-  isMobileDragging
+  onDropOnTask
 }: DraggableTaskProps) => {
   const [isDragging, setIsDragging] = useState(false);
-  let longPressTimer: number | undefined;
-
-  const clearLongPressTimer = () => {
-    if (longPressTimer) {
-      window.clearTimeout(longPressTimer);
-      longPressTimer = undefined;
-    }
-  };
 
   const handleDragStart = (e: React.DragEvent) => {
     setIsDragging(true);
@@ -61,33 +46,9 @@ const DraggableTask = ({
       onDragEnd={handleDragEnd}
       onDragOver={(e) => { try { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; } catch {} }}
       onDrop={(e) => { if (onDropOnTask) { e.preventDefault(); e.stopPropagation(); onDropOnTask(task.id, task.date, e); } }}
-      // Touch-based mobile drag
-      onTouchStart={(_e) => {
-        // Do not block scroll unless we actually start dragging
-        clearLongPressTimer();
-        longPressTimer = window.setTimeout(() => {
-          setIsDragging(true);
-          if (onMobileDragStart) onMobileDragStart(task.id);
-        }, 180);
-      }}
-      onTouchMove={(e) => {
-        // If dragging, prevent scrolling and default iOS behaviors
-        if (isDragging || isMobileDragging) {
-          try { e.preventDefault(); } catch {}
-        }
-      }}
-      onTouchEnd={(_e) => {
-        clearLongPressTimer();
-        if (isDragging || isMobileDragging) {
-          // Treat as drop-on-task for swap when released over this card
-          if (onMobileDropOnTask) onMobileDropOnTask(task.id, task.date);
-        }
-        setIsDragging(false);
-      }}
       className={`cursor-move transition-all duration-200 ${
-        (isDragging || isMobileDragging) ? 'opacity-50 scale-95' : 'hover:shadow-md'
+        isDragging ? 'opacity-50 scale-95' : 'hover:shadow-md'
       } ${isCompleted ? 'bg-green-50 border-green-200' : 'bg-white'}`}
-      style={{ touchAction: 'manipulation' }}
     >
       <CardContent className="p-0">
         <div className={`border-l-4 ${getSubjectColor(task.subject)} pl-3 py-3 px-3`}>
@@ -104,12 +65,12 @@ const DraggableTask = ({
                 <span className={`font-medium text-sm ${isCompleted ? 'line-through text-gray-500' : 'text-gray-900'}`}>
                   {task.subject}
                 </span>
-                <Badge className={getTypeColor(task.type)}>
+                <Badge size="sm" className={getTypeColor(task.type)}>
                   {task.type === 'lecture' ? '강의' : 
                    task.type === 'review' ? '복습' : '문제풀이'}
                 </Badge>
                 {task.originalDate && task.originalDate !== task.date && (
-                  <Badge variant="outline" className="text-xs">
+                  <Badge variant="outline" size="sm" className="text-xs">
                     이동됨
                   </Badge>
                 )}
