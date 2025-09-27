@@ -228,7 +228,7 @@ export const dailyPlans: DailyPlan[] = [
     date: '2025-09-25',
     dayOfWeek: '목',
     isWeekend: false,
-    totalHours: 2.5,
+    totalHours: 4,
     tasks: [
       {
         id: 'credit-35-36',
@@ -245,6 +245,14 @@ export const dailyPlans: DailyPlan[] = [
         content: '4.1 최댓값과 최솟값',
         lectures: '1챕터',
         duration: 0.38
+      },
+      {
+        id: 'linear-17',
+        subject: '선형대수학',
+        type: 'lecture',
+        content: 'KOCW 17강',
+        lectures: '1강',
+        duration: 1.5
       },
       {
         id: 'stat-2',
@@ -287,12 +295,20 @@ export const dailyPlans: DailyPlan[] = [
     totalHours: 4.5,
     tasks: [
       {
-        id: 'credit-39-42',
+        id: 'credit-39-40',
         subject: '신용분석사',
         type: 'lecture',
-        content: '2부 39~42강',
-        lectures: '4강',
-        duration: 2
+        content: '2부 39~40강',
+        lectures: '2강',
+        duration: 1
+      },
+      {
+        id: 'credit-41-42',
+        subject: '신용분석사',
+        type: 'lecture',
+        content: '2부 41~42강',
+        lectures: '2강',
+        duration: 1
       },
       {
         id: 'linear-18',
@@ -303,10 +319,10 @@ export const dailyPlans: DailyPlan[] = [
         duration: 1.5
       },
       {
-        id: 'stat-6',
+        id: 'stat-3',
         subject: '확률과통계',
         type: 'lecture',
-        content: '6강 조건부 평균',
+        content: '3강 이산확률변수',
         lectures: '1강',
         duration: 1
       }
@@ -319,12 +335,20 @@ export const dailyPlans: DailyPlan[] = [
     totalHours: 4.5,
     tasks: [
       {
-        id: 'credit-43-46',
+        id: 'credit-43-44',
         subject: '신용분석사',
         type: 'lecture',
-        content: '2부 43~46강',
-        lectures: '4강',
-        duration: 2
+        content: '2부 43~44강',
+        lectures: '2강',
+        duration: 1
+      },
+      {
+        id: 'credit-45-46',
+        subject: '신용분석사',
+        type: 'lecture',
+        content: '2부 45~46강',
+        lectures: '2강',
+        duration: 1
       },
       {
         id: 'calc-5-2-5-4',
@@ -341,7 +365,7 @@ export const dailyPlans: DailyPlan[] = [
         content: 'KOCW 19강',
         lectures: '1강',
         duration: 1.5
-      }
+      },
     ]
   },
   {
@@ -367,10 +391,10 @@ export const dailyPlans: DailyPlan[] = [
         duration: 0.25
       },
       {
-        id: 'stat-7',
+        id: 'stat-4',
         subject: '확률과통계',
         type: 'lecture',
-        content: '7강 여러가지 이산확률분포',
+        content: '4강 이산 확률변수의 기댓값과 분산',
         lectures: '1강',
         duration: 1
       }
@@ -399,10 +423,10 @@ export const dailyPlans: DailyPlan[] = [
         duration: 0.36
       },
       {
-        id: 'stat-8',
+        id: 'stat-5',
         subject: '확률과통계',
         type: 'lecture',
-        content: '8강 지수분포와 어랑분포',
+        content: '5강 연속확률변수와 확률밀도함수',
         lectures: '1강',
         duration: 1
       }
@@ -423,10 +447,10 @@ export const dailyPlans: DailyPlan[] = [
         duration: 1
       },
       {
-        id: 'linear-21',
+        id: 'linear-20',
         subject: '선형대수학',
         type: 'lecture',
-        content: 'KOCW 21강',
+        content: 'KOCW 20강',
         lectures: '1강',
         duration: 1.5
       }
@@ -472,10 +496,10 @@ export const dailyPlans: DailyPlan[] = [
         duration: 1.5
       },
       {
-        id: 'linear-22',
+        id: 'linear-21',
         subject: '선형대수학',
         type: 'lecture',
-        content: 'KOCW 22강',
+        content: 'KOCW 21강',
         lectures: '1강',
         duration: 1.5
       }
@@ -505,10 +529,10 @@ export const dailyPlans: DailyPlan[] = [
         duration: 0.44
       },
       {
-        id: 'linear-23',
+        id: 'linear-22',
         subject: '선형대수학',
         type: 'lecture',
-        content: 'KOCW 23강',
+        content: 'KOCW 22강',
         lectures: '1강',
         duration: 1.5
       }
@@ -538,13 +562,21 @@ export const dailyPlans: DailyPlan[] = [
         duration: 0.68
       },
       {
-        id: 'linear-24',
+        id: 'linear-23',
         subject: '선형대수학',
         type: 'lecture',
-        content: 'KOCW 24강 완강',
+        content: 'KOCW 23강',
         lectures: '1강',
         duration: 1.5
-      }
+      },
+      {
+        id: 'stat-6',
+        subject: '확률과통계',
+        type: 'lecture',
+        content: '6강 조건부 평균',
+        lectures: '1강',
+        duration: 1
+      },
     ]
   },
   {
@@ -571,10 +603,10 @@ export const dailyPlans: DailyPlan[] = [
         duration: 1.45
       },
       {
-        id: 'stat-12',
+        id: 'stat-7',
         subject: '확률과통계',
         type: 'lecture',
-        content: '12강 조건부 평균과 공분산',
+        content: '7강 여러가지 이산확률분포',
         lectures: '1강',
         duration: 1
       }
@@ -604,10 +636,10 @@ export const dailyPlans: DailyPlan[] = [
         duration: 0.5
       },
       {
-        id: 'stat-13',
+        id: 'stat-8',
         subject: '확률과통계',
         type: 'lecture',
-        content: '13강 상관계수와 연합정규분포',
+        content: '8강 지수분포와 어랑분포',
         lectures: '1강',
         duration: 1
       }
@@ -637,11 +669,11 @@ export const dailyPlans: DailyPlan[] = [
         duration: 1.5
       },
       {
-        id: 'stat-review-1',
+        id: 'stat-9',
         subject: '확률과통계',
-        type: 'review',
-        content: '전체 복습 1차',
-        lectures: '복습',
+        type: 'lecture',
+        content: '9강 이변량 정규분포',
+        lectures: '1강',
         duration: 1
       }
     ]
@@ -670,12 +702,12 @@ export const dailyPlans: DailyPlan[] = [
         duration: 1.5
       },
       {
-        id: 'linear-review-2',
+        id: 'linear-24',
         subject: '선형대수학',
-        type: 'review',
-        content: '전체 복습 2차',
-        lectures: '복습',
-        duration: 0.5
+        type: 'lecture',
+        content: 'KOCW 24강 완강',
+        lectures: '1강',
+        duration: 1.5
       }
     ]
   },
@@ -699,6 +731,14 @@ export const dailyPlans: DailyPlan[] = [
         type: 'lecture',
         content: '다중 적분 전체 (3부)',
         lectures: '1챕터',
+        duration: 1
+      },
+      {
+        id: 'stat-10',
+        subject: '확률과통계',
+        type: 'lecture',
+        content: '10강 여러가지 연속확률분포',
+        lectures: '1강',
         duration: 1
       }
     ]
@@ -726,11 +766,11 @@ export const dailyPlans: DailyPlan[] = [
         duration: 2
       },
       {
-        id: 'stat-review-2',
+        id: 'stat-11',
         subject: '확률과통계',
-        type: 'review',
-        content: '전체 복습 2차',
-        lectures: '복습',
+        type: 'lecture',
+        content: '11강 확률변수 변환',
+        lectures: '1강',
         duration: 1
       }
     ]
@@ -750,20 +790,20 @@ export const dailyPlans: DailyPlan[] = [
         duration: 1
       },
       {
-        id: 'stat-review-3',
+        id: 'stat-12',
         subject: '확률과통계',
-        type: 'review',
-        content: '전체 복습 3차',
-        lectures: '복습',
-        duration: 1.5
+        type: 'lecture',
+        content: '12강 조건부 평균과 공분산',
+        lectures: '1강',
+        duration: 1
       },
       {
-        id: 'linear-review-3',
-        subject: '선형대수학',
-        type: 'review',
-        content: '전체 복습 3차',
-        lectures: '복습',
-        duration: 2
+        id: 'stat-13',
+        subject: '확률과통계',
+        type: 'lecture',
+        content: '13강 상관계수와 연합정규분포',
+        lectures: '1강',
+        duration: 1
       }
     ]
   },
@@ -926,12 +966,12 @@ export const dailyPlans: DailyPlan[] = [
     totalHours: 2.5,
     tasks: [
       {
-        id: 'stat-2',
-        subject: '확률과통계',
-        type: 'lecture',
-        content: '2강 독립사건과 확률',
-        lectures: '1강',
-        duration: 1
+        id: 'credit-mock-2',
+        subject: '신용분석사',
+        type: 'practice',
+        content: '추가 모의고사',
+        lectures: '모의고사',
+        duration: 2.5
       }
     ]
   }
